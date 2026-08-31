@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const lines = [
@@ -12,6 +12,7 @@ function App() {
   const [displayedText, setDisplayedText] = useState('')
   const [isTyping, setIsTyping] = useState(true)
   const [isFading, setIsFading] = useState(false)
+  const typingInterval = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     setDisplayedText('')
@@ -19,23 +20,34 @@ function App() {
 
     let characterIndex = 0
 
-    const interval = setInterval(() => {
+    typingInterval.current = setInterval(() => {
       if (characterIndex < lines[lineIndex].length) {
         setDisplayedText(
           lines[lineIndex].slice(0, characterIndex + 1)
         )
         characterIndex++
       } else {
-        clearInterval(interval)
+        clearInterval(typingInterval.current!)
+        typingInterval.current = null
         setIsTyping(false)
       }
     }, 50)
 
-    return () => clearInterval(interval)
+    return () => {
+      if (typingInterval.current) clearInterval(typingInterval.current)
+    }
   }, [lineIndex])
 
-  const nextLine = () => {
-    if (isTyping || isFading || lineIndex === lines.length - 1) return
+  const nextLine = useCallback(() => {
+    if (isTyping) {
+      if (typingInterval.current) clearInterval(typingInterval.current)
+      typingInterval.current = null
+      setDisplayedText(lines[lineIndex])
+      setIsTyping(false)
+      return
+    }
+
+    if (isFading || lineIndex === lines.length - 1) return
 
     setIsFading(true)
 
@@ -43,7 +55,19 @@ function App() {
       setLineIndex((currentIndex) => currentIndex + 1)
       setIsFading(false)
     }, 400)
-  }
+  }, [isFading, isTyping, lineIndex])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat) return
+
+      event.preventDefault()
+      nextLine()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [nextLine])
 
   return (
     <main onClick={nextLine}>
